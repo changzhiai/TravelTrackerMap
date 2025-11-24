@@ -1,0 +1,12 @@
+/* * This file is for component-specific styles if needed.
+ * All specific styling for the Travel Tracker application, 
+ * including responsive layouts and colors, is defined 
+ * using Tailwind utility classes in App.tsx.
+ * 
+ * Note: Tailwind directives are in index.css, not here.
+ */
+
+/* * Note: The specific map text styles are deliberately kept 
+ * inside the SVG element in App.tsx for better scoping and 
+ * integration with D3/SVG scaling logic.
+ */
