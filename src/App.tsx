@@ -169,6 +169,23 @@ export default function TravelTracker() {
   const [isDragging, setIsDragging] = useState(false);
   const lastMousePos = useRef({ x: 0, y: 0 });
   const isDragRef = useRef(false); // To distinguish click vs drag
+  const pinchDistanceRef = useRef<number | null>(null);
+  const pinchStartScaleRef = useRef(1);
+
+  const getTouchDistance = (touches: React.TouchList) => {
+    const [a, b] = [touches[0], touches[1]];
+    const dx = a.clientX - b.clientX;
+    const dy = a.clientY - b.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const getTouchMidpoint = (touches: React.TouchList) => {
+    const [a, b] = [touches[0], touches[1]];
+    return {
+      x: (a.clientX + b.clientX) / 2,
+      y: (a.clientY + b.clientY) / 2
+    };
+  };
 
   // 1. Auth & Data Init
   useEffect(() => {
@@ -390,15 +407,16 @@ export default function TravelTracker() {
     const url = URL.createObjectURL(svgBlob);
     
     img.onload = () => {
+      const verticalPadding = 40; // add visual breathing room above/below map
       canvas.width = MAP_WIDTH;
-      canvas.height = MAP_HEIGHT;
+      canvas.height = MAP_HEIGHT + verticalPadding * 2;
       
       if (ctx) {
         // Draw white background before drawing SVG content
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, verticalPadding);
         
         const pngUrl = canvas.toDataURL("image/png");
         const downloadLink = document.createElement("a");
@@ -495,6 +513,49 @@ export default function TravelTracker() {
     }));
     
     lastMousePos.current = { x: clientX, y: clientY };
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      pinchDistanceRef.current = getTouchDistance(e.touches);
+      pinchStartScaleRef.current = transform.k;
+      isDragRef.current = false;
+      setIsDragging(false);
+    } else {
+      handleMouseDown(e);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinchDistanceRef.current && mapRef.current) {
+      e.preventDefault();
+      const currentDistance = getTouchDistance(e.touches);
+      const scaleFactor = currentDistance / pinchDistanceRef.current;
+      const desiredScale = Math.max(1, Math.min(8, pinchStartScaleRef.current * scaleFactor));
+
+      const rect = mapRef.current.getBoundingClientRect();
+      const midpoint = getTouchMidpoint(e.touches);
+      const mx = midpoint.x - rect.left;
+      const my = midpoint.y - rect.top;
+      const svgMx = mx * (MAP_WIDTH / rect.width);
+      const svgMy = my * (MAP_HEIGHT / rect.height);
+
+      setTransform(prev => {
+        const newX = svgMx - (svgMx - prev.x) * (desiredScale / prev.k);
+        const newY = svgMy - (svgMy - prev.y) * (desiredScale / prev.k);
+        return { k: desiredScale, x: newX, y: newY };
+      });
+    } else {
+      handleMouseMove(e);
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length < 2) {
+      pinchDistanceRef.current = null;
+      pinchStartScaleRef.current = transform.k;
+    }
+    handleMouseUp();
   };
 
   const handleMouseUp = () => {
@@ -641,9 +702,9 @@ export default function TravelTracker() {
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
-              onTouchStart={handleMouseDown}
-              onTouchMove={handleMouseMove}
-              onTouchEnd={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             >
               <style>
                 {/* Inline CSS for map text for SVG rendering compatibility */}
