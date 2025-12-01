@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Travel Tracker - World Map Style</title>
+    <!-- Load Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles to match the Travel Tracker aesthetic */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafd; 
+            min-height: 100vh;
+        }
+        
+        /* Default subtle fill for unselected countries/states: Light gray/blue */
+        .country-path {
+            fill: #E8EDF1; 
+            stroke: #ffffff; 
+            stroke-width: 0.5px; 
+            cursor: pointer;
+            transition: fill 0.2s;
+        }
+        
+        /* Highlight path on hover */
+        .country-path:hover {
+            fill: #dbeafe; /* Light blue on hover */
+        }
+        
+        /* Custom class for the active/clicked path (Vibrant Emerald) */
+        .country-highlight {
+            fill: #10b981 !important; /* Tailwind emerald-500 */
+            stroke: #047857; /* Darker emerald border */
+            stroke-width: 0.75px;
+        }
+        
+        /* Style for the sidebar list items */
+        .country-list-item {
+            cursor: pointer;
+            padding: 8px 16px;
+            font-size: 14px;
+            color: #374151;
+            transition: background-color 0.15s;
+        }
+        .country-list-item:hover {
+            background-color: #f3f4f6;
+        }
+        .country-list-item.selected {
+            background-color: #d1fae5; /* Very light emerald background */
+            font-weight: 600;
+            color: #065f46;
+        }
+
+        /* Map Labels */
+        .map-label {
+            font-size: 10px;
+            pointer-events: none; /* Allows clicks to pass through to the map path */
+            fill: #374151;
+            font-weight: 500;
+            text-anchor: middle;
+            text-transform: uppercase;
+        }
+
+        /* Ensure the SVG scales within the map container */
+        #map-container svg {
+            display: block;
+        }
+        
+        /* Custom style for the select elements */
+        .custom-select {
+            /* Remove default browser styles */
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor'%3e%3cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3e%3c/path%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1.25em 1.25em;
+            padding-right: 2.5rem; 
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <!-- HEADER / NAVIGATION (Scope selector is now here) -->
+    <header class="flex justify-between items-center py-3 px-4 mb-4 bg-white shadow-md rounded-lg">
+        <!-- Left Group: Title and Dropdown -->
+        <div class="flex items-center flex-wrap gap-x-4 gap-y-2">
+            
+            <div class="flex items-center space-x-2">
+                <svg class="w-6 h-6 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h1.5M21 12.9a9 9 0 11-17.65 0"></path></svg>
+                <h1 class="text-xl font-bold text-gray-900">Travel Tracker</h1>
+            </div>
+
+            <!-- Scope Selector Dropdown (Width is set to w-24 sm:w-28) -->
+            <div class="relative w-24 sm:w-28">
+                <select id="scope-selector" class="custom-select block w-full text-sm py-1.5 px-3 border border-gray-300 bg-white rounded-lg shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 text-gray-700 font-medium">
+                    <option value="world">World</option>
+                    <option value="usa">USA</option>
+                </select>
+            </div>
+            
+            <p class="text-sm text-gray-500 hidden lg:block" id="scope-label">Tracking global adventures</p>
+        </div>
+        
+        <!-- Right Group: Stats -->
+        <div class="flex items-center space-x-4 text-sm font-medium hidden sm:flex">
+            <div class="flex items-center space-x-1 text-yellow-600">
+                <span class="font-extrabold" id="locations-count">0</span>
+                <span id="location-type-label">Countries</span>
+            </div>
+            <div class="flex items-center space-x-1 text-gray-600">
+                <span class="font-extrabold" id="percentage">0.0</span>
+                <span id="total-type-label">% World</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT AREA (Map + Sidebar) -->
+    <div class="flex h-[calc(100vh-100px)] space-x-4">
+        
+        <!-- MAP CONTAINER (Main Area) -->
+        <div class="flex-grow bg-white shadow-xl rounded-xl p-6 relative flex flex-col">
+            
+            <!-- Map Controls and Title -->
+            <div class="flex justify-between items-center mb-4 border-b pb-3 flex-wrap gap-y-3">
+                
+                <h2 class="text-lg font-semibold text-gray-700 whitespace-nowrap" id="map-title">World Map</h2>
+                
+                <!-- MAP CONTROLS -->
+                <div class="flex items-center space-x-3">
+                    
+                    <!-- Zoom & Reset Controls -->
+                    <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+                        
+                        <!-- Zoom In (+) -->
+                        <button class="p-1 hover:bg-white rounded-md shadow-sm transition-all" id="zoom-in" title="Zoom In">
+                            <!-- Plus Icon -->
+                            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+
+                        <!-- Zoom Out (-) -->
+                        <button class="p-1 hover:bg-white rounded-md shadow-sm transition-all" id="zoom-out" title="Zoom Out">
+                            <!-- Minus Icon -->
+                            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                        </button>
+
+                        <!-- Reset View (RotateCcw Icon) -->
+                        <button class="p-1 hover:bg-white rounded-md shadow-sm transition-all" id="reset-button" title="Reset View (Return to initial position)">
+                            <!-- Reset/RotateCcw Icon -->
+                            <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 0a8.001 8.001 0 01-15.356 2M4 4h5"></path></svg>
+                        </button>
+                    </div>
+                    
+                    <!-- Divider -->
+                    <div class="h-6 w-px bg-gray-300"></div>
+
+                    <!-- Labels and Save Controls (Updated Style) -->
+                    <div class="flex items-center space-x-2">
+                        <!-- Labels Button (Toggle) -->
+                        <button id="toggle-labels" class="text-xs flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-colors font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" title="Toggle country/state labels">
+                            <!-- Icon size adjusted to w-4 h-4 -->
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5m-5 4v10a1 1 0 001 1h6a1 1 0 001-1V4a1 1 0 00-1-1h-2"></path></svg>
+                            <span class="hidden sm:inline" id="labels-text">Labels</span>
+                        </button>
+                        
+                        <!-- Save Button (Exports PNG) -->
+                        <button id="save-button" class="text-xs flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition-colors font-medium" title="Export map as PNG image">
+                            <!-- Icon size adjusted to w-4 h-4 -->
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span class="hidden sm:inline">Save</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Loading Indicator and Map Area -->
+            <div id="loading" class="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-sm z-10 rounded-xl">
+                <svg class="animate-spin h-6 w-6 mr-3 text-indigo-500" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span class="text-gray-600">Loading world map data...</span>
+            </div>
+
+            <div id="map-container" class="flex-grow w-full">
+                <!-- D3.js will inject the SVG here -->
+            </div>
+            
+            <p class="text-xs text-gray-400 text-right mt-2">Scroll to zoom • Click/Drag to pan</p>
+        </div>
+
+        <!-- SIDEBAR (Countries List) -->
+        <div class="w-96 bg-white shadow-xl rounded-xl p-4 flex flex-col">
+            <h2 class="text-lg font-semibold text-gray-700 border-b pb-3 mb-3" id="list-title">Countries List</h2>
+            <div class="relative mb-3">
+                <input type="text" id="search-input" placeholder="Search..." class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm" />
+                <svg class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            </div>
+
+            <!-- List container for locations -->
+            <div id="countries-list" class="flex-grow overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                <!-- Location list items will be injected here -->
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Notification Container for Save message -->
+    <div id="notification-container" class="fixed bottom-4 right-4 z-50"></div>
+
+    <!-- D3 LIBRARIES MUST BE LOADED BEFORE YOUR CUSTOM SCRIPT -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
+    <script src="https://d3js.org/d3-geo-projection.v4.min.js"></script>
+
+    <script>
+        // Updated URL to GeoJSON format
+        const WORLD_GEOJSON_URL = 'https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson';
+        const USA_STATES_URL = 'https://unpkg.com/us-atlas@3.0.0/states-10m.json'; 
+        
+        // Data storage
+        let worldCountryFeatures = []; 
+        let usStateFeatures = []; // Stores individual US state features
+        let activeLocations = new Set(); // Stores selected country or state names
+        let currentScope = 'world'; // Default scope
+        let showLabels = false; // State for label visibility
+        
+        // D3 setup
+        const container = document.getElementById('map-container');
+        const listContainer = d3.select('#countries-list'); 
+        const loadingElement = document.getElementById('loading');
+        const searchInput = document.getElementById('search-input');
+        const scopeSelector = document.getElementById('scope-selector'); 
+
+        // Projections
+        // Using Miller Cylindrical for a better balance between "flat" appearance and area accuracy
+        const worldProjection = d3.geoMiller(); 
+        const usaProjection = d3.geoAlbersUsa(); // Albers projection for USA
+        let currentProjection = worldProjection;
+
+        // Path generator uses the current projection
+        let path = d3.geoPath().projection(currentProjection); 
+
+        const svg = d3.select("#map-container")
+            .append("svg")
+            .attr("width", '100%')
+            .attr("height", '100%');
+
+        let mapGroup = svg.append("g").attr("id", "map-group");
+        let labelGroup = svg.append("g").attr("id", "label-group"); 
+        let initialTransform = d3.zoomIdentity;
+        
+        let currentFeatures = worldCountryFeatures;
+
+
+        // --- DATA LOADING ---
+        async function loadWorldData() {
+            try {
+                const geoJsonData = await d3.json(WORLD_GEOJSON_URL);
+                
+                // Filter out Antarctica to ensure the map boundary only includes the primary landmasses
+                worldCountryFeatures = geoJsonData.features
+                    .filter(d => d.properties.name && d.properties.name !== 'Antarctica');
+                
+                console.log("World GeoJSON map data loaded successfully (excluding Antarctica).");
+            } catch (error) {
+                console.error("Error loading world map data:", error);
+                loadingElement.innerHTML = '<span class="text-red-500 font-bold">Error loading world map data.</span>';
+                throw error;
+            }
+        }
+        
+        async function loadUSAData() {
+            if (usStateFeatures.length > 0) return; // Already loaded
+
+            try {
+                const topoData = await d3.json(USA_STATES_URL);
+                usStateFeatures = topojson.feature(topoData, topoData.objects.states).features.filter(d => d.properties.name);
+                console.log("USA states map data loaded successfully.");
+            } catch (error) {
+                console.error("Error loading USA states map data:", error);
+                showNotification("Failed to load US states map data. Check the console.", 'error');
+                usStateFeatures = []; 
+            }
+        }
+        
+        // --- SCOPE SELECTOR LOGIC ---
+        scopeSelector.addEventListener('change', function() {
+            handleScopeSelection(this.value);
+        });
+
+        async function handleScopeSelection(scope) {
+            if (scope === currentScope) return;
+            currentScope = scope;
+            
+            activeLocations.clear(); 
+            // FIX: Use the dimension-only function here before changing map data
+            updateSvgDimensions(); 
+
+            // 1. Update map projection and data source
+            if (currentScope === 'world') {
+                currentProjection = worldProjection;
+                currentFeatures = worldCountryFeatures;
+                
+                document.getElementById('map-title').textContent = 'World Map'; 
+                document.getElementById('list-title').textContent = 'Countries List';
+                document.getElementById('location-type-label').textContent = 'Countries';
+                document.getElementById('total-type-label').textContent = '% World';
+                document.getElementById('scope-label').textContent = 'Tracking global adventures';
+                
+            } else if (currentScope === 'usa') {
+                loadingElement.style.display = 'flex';
+                await loadUSAData(); 
+                loadingElement.style.display = 'none';
+
+                // --- START Changes for 'USA Map' ---
+                document.getElementById('map-title').textContent = 'USA Map'; 
+                document.getElementById('list-title').textContent = 'States List';
+                document.getElementById('location-type-label').textContent = 'States';
+                document.getElementById('total-type-label').textContent = '% USA'; 
+                document.getElementById('scope-label').textContent = 'Tracking US adventures (States)';
+                // --- END Changes for 'USA Map' ---
+
+                currentProjection = usaProjection;
+                currentFeatures = usStateFeatures; 
+            }
+            
+            path = d3.geoPath().projection(currentProjection); 
+
+            // 2. Re-render map and reset view
+            await renderMap();
+            resetView(); 
+            
+            // 3. Re-populate list and update stats
+            populateList(currentFeatures);
+            updateStats();
+        }
+        
+
+        // Core toggle function that applies changes to map and data set
+        function toggleLocation(locationName) {
+            const normalizedName = locationName.replace(/\s/g, '-').replace(/[^a-zA-Z0-9-]/g, ''); 
+            
+            const pathElement = d3.select(`path[data-name="${normalizedName}" ]`);
+            const listItem = listContainer.select(`#list-${normalizedName}`);
+
+            let isSelected = activeLocations.has(locationName);
+
+            if (isSelected) {
+                activeLocations.delete(locationName);
+                pathElement.classed('country-highlight', false);
+                listItem.classed('selected', false);
+                listItem.select('input').property('checked', false);
+            } else {
+                activeLocations.add(locationName);
+                pathElement.classed('country-highlight', true);
+                listItem.classed('selected', true);
+                listItem.select('input').property('checked', true);
+            }
+
+            if (showLabels) {
+                renderLabels();
+            }
+        }
+
+
+        // Handles click on map path or list item
+        function handleLocationToggle(locationName) {
+            toggleLocation(locationName);
+            populateList(currentFeatures); 
+            updateStats();
+        }
+
+        // --- LABELS LOGIC ---
+
+        // Function to render labels for selected locations
+        function renderLabels() {
+            const selectedFeatures = currentFeatures.filter(d => activeLocations.has(d.properties.name));
+            
+            if (showLabels) {
+                labelGroup.selectAll(".map-label")
+                    .data(selectedFeatures, d => d.properties.name)
+                    .join(
+                        enter => enter.append("text")
+                            .attr("class", "map-label")
+                            .attr("transform", d => `translate(${path.centroid(d)})`)
+                            .text(d => d.properties.name)
+                            .attr("opacity", 0)
+                            .transition()
+                            .duration(500)
+                            .attr("opacity", 1),
+                        update => update
+                            .transition()
+                            .duration(500)
+                            .attr("transform", d => `translate(${path.centroid(d)})`)
+                            .text(d => d.properties.name),
+                        exit => exit
+                            .transition()
+                            .duration(500)
+                            .attr("opacity", 0)
+                            .remove()
+                    );
+            } else {
+                labelGroup.selectAll(".map-label")
+                    .transition()
+                    .duration(500)
+                    .attr("opacity", 0)
+                    .remove();
+            }
+        }
+
+        // Toggle Labels Button
+        document.getElementById('toggle-labels').addEventListener('click', function() {
+            showLabels = !showLabels;
+            
+            if (showLabels) {
+                this.classList.remove('bg-slate-100', 'hover:bg-slate-200', 'text-slate-600');
+                this.classList.add('bg-emerald-100', 'text-emerald-700');
+            } else {
+                this.classList.remove('bg-emerald-100', 'text-emerald-700');
+                this.classList.add('bg-slate-100', 'hover:bg-slate-200', 'text-slate-600');
+            }
+            
+            renderLabels();
+        });
+
+
+        // --- D3 ZOOM BEHAVIOR ---
+        function zoomed(event) {
+            mapGroup.attr("transform", event.transform);
+            labelGroup.attr("transform", event.transform); 
+        }
+
+        const zoom = d3.zoom()
+            .scaleExtent([1, 10]) 
+            .on("zoom", zoomed);
+        
+        svg.call(zoom);
+
+        document.getElementById('zoom-in').addEventListener('click', () => {
+            svg.transition().call(zoom.scaleBy, 1.2);
+        });
+
+        document.getElementById('zoom-out').addEventListener('click', () => {
+            svg.transition().call(zoom.scaleBy, 0.8);
+        });
+        
+        document.getElementById('reset-button').addEventListener('click', resetView);
+        
+        // Function 1: Only calculates dimensions and sets viewBox
+        function updateSvgDimensions() {
+            const parent = container.parentElement;
+            // Subtract padding/margins used in the parent container
+            const width = parent.clientWidth - 48; 
+            const height = parent.clientHeight - 80; 
+            
+            svg.attr("viewBox", `0 0 ${width} ${height}`);
+            return { width, height };
+        }
+
+        // Function 2: Calculates dimensions, fits the projection, and sets initialTransform
+        function updateSvgDimensionsAndFit() {
+            const { width, height } = updateSvgDimensions();
+            
+            // Fit the current projection to the current features (World or USA)
+            currentProjection.fitSize([width, height], {type: "FeatureCollection", features: currentFeatures});
+            
+            // Store the resulting transform for the reset button
+            // This is a custom way to derive the transform from fitSize, as D3 doesn't expose it directly
+            const [[x0, y0], [x1, y1]] = path.bounds({type: "FeatureCollection", features: currentFeatures});
+            
+            // Handle case where path.bounds returns invalid coordinates (e.g., empty features)
+            if (x0 === Infinity || x1 === -Infinity || y0 === Infinity || y1 === -Infinity) {
+                initialTransform = d3.zoomIdentity;
+                return;
+            }
+
+            const scale = Math.min(width / (x1 - x0), height / (y1 - y0));
+            // Apply scale to centers and calculate translation to center map
+            const translateX = (width - scale * (x0 + x1)) / 2;
+            const translateY = (height - scale * (y0 + y1)) / 2;
+
+
+            initialTransform = d3.zoomIdentity.translate(translateX, translateY).scale(scale);
+        }
+
+
+        // Function to reset the map view to fit the current features
+        function resetView() {
+            // Need a brief delay to ensure SVG dimensions are set correctly before fitting
+            setTimeout(() => {
+                // Recalculate dimensions and fit the projection to the current features (World or USA)
+                updateSvgDimensionsAndFit();
+                
+                svg.transition()
+                    .duration(750)
+                    .call(zoom.transform, initialTransform);
+                
+                // Must redraw paths after projection change to apply new coordinates
+                if (currentFeatures.length > 0) {
+                    mapGroup.selectAll(".country-path").attr("d", path);
+                }
+
+                // Re-render labels on reset
+                if (showLabels) {
+                    renderLabels();
+                }
+            }, 50);
+        }
+
+        // --- END ZOOM BEHAVIOR ---
+
+
+        // --- EXPORT/NOTIFICATION LOGIC ---
+
+        function showNotification(message, type = 'success') {
+            const container = document.getElementById('notification-container');
+            const color = type === 'success' ? 'bg-emerald-500' : 'bg-red-500';
+            const icon = type === 'success' ? 
+                '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>' :
+                '<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+            
+            const notification = document.createElement('div');
+            notification.className = `flex items-center ${color} text-white text-sm font-bold px-4 py-3 rounded-lg shadow-lg mb-3 transform translate-x-full transition-all duration-300`;
+            notification.innerHTML = icon + `<span>${message}</span>`;
+            
+            container.prepend(notification); 
+
+            setTimeout(() => {
+                notification.style.transform = 'translateX(0)';
+            }, 10); 
+
+            setTimeout(() => {
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    notification.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Function to convert the SVG map to a PNG file and trigger download
+        function saveMapAsPNG() {
+            const svgNode = svg.node();
+            const { width, height } = svgNode.getBoundingClientRect();
+
+            svg.style('background-color', '#ffffff');
+
+            const svgString = new XMLSerializer().serializeToString(svgNode);
+            
+            svg.style('background-color', null);
+
+            const svgDataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            const img = new Image();
+            img.onload = function() {
+                try {
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    const pngDataUrl = canvas.toDataURL('image/png');
+
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = pngDataUrl;
+                    const date = new Date().toISOString().split('T')[0];
+                    const filename = `${currentScope}_travel_map_${date}.png`;
+                    downloadLink.download = filename;
+                    
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+                    
+                    showNotification('Map exported as PNG!', 'success');
+                } catch (e) {
+                    console.error("Error drawing SVG to canvas or exporting:", e);
+                    showNotification('Error exporting map. Try resetting the view.', 'error');
+                }
+            };
+
+            img.onerror = function(err) {
+                 console.error("Error loading SVG into image object.", err);
+                 showNotification('Error loading map data for export. Please check the console.', 'error');
+            };
+
+            img.src = svgDataUrl;
+        }
+
+        document.getElementById('save-button').addEventListener('click', saveMapAsPNG);
+        // --- END EXPORT/NOTIFICATION LOGIC ---
+
+
+        // Function to update the statistics in the header
+        function updateStats() {
+            const count = activeLocations.size;
+            let totalReference = 0;
+            let percentage = 0;
+            
+            if (currentScope === 'world') {
+                // Total reference is all world countries (excluding Antarctica)
+                totalReference = worldCountryFeatures.length; 
+                percentage = (count / totalReference * 100).toFixed(1); 
+            } else if (currentScope === 'usa') {
+                totalReference = usStateFeatures.length; 
+                percentage = (count / totalReference * 100).toFixed(1); 
+            }
+            
+            d3.select("#locations-count").text(count);
+            d3.select("#percentage").text(percentage);
+        }
+        
+        // Function to populate the sidebar list
+        function populateList(features) {
+            let locationNames = features
+                .map(d => d.properties.name)
+                .filter(name => name)
+                .sort();
+
+            const filteredNames = locationNames.filter(name => {
+                const searchVal = searchInput.value.toLowerCase();
+                return name.toLowerCase().includes(searchVal);
+            });
+
+            listContainer.selectAll(".country-list-item").data(filteredNames, d => d)
+                .join(
+                    enter => enter.append("div")
+                        .attr("class", "country-list-item flex justify-between items-center")
+                        .attr("id", d => `list-${d.replace(/\s/g, '-').replace(/[^a-zA-Z0-9-]/g, '')}`)
+                        .html(d => `
+                            <span>${d}</span>
+                            <input type="checkbox" class="form-checkbox text-emerald-500 h-4 w-4 border-gray-300 rounded-full focus:ring-emerald-400" ${activeLocations.has(d) ? 'checked' : ''} />
+                        `)
+                        .classed('selected', d => activeLocations.has(d))
+                        .on("click", function(event, d) {
+                            if (event.target.type !== 'checkbox') {
+                                d3.select(this).select('input').property('checked', !d3.select(this).select('input').property('checked'));
+                            }
+                            handleLocationToggle(d);
+                        }),
+                    update => update
+                        .classed('selected', d => activeLocations.has(d))
+                        .select('input')
+                        .property('checked', d => activeLocations.has(d)),
+                    exit => exit.remove()
+                );
+        }
+
+        // Search input logic (filters the list based on the current scope)
+        searchInput.addEventListener('input', () => {
+            populateList(currentFeatures);
+        });
+
+
+        // Function to draw or update the map based on current features and projection
+        async function renderMap() {
+            updateSvgDimensions(); // Ensure viewBox is set before drawing paths
+
+            mapGroup = d3.select("#map-group");
+
+            const paths = mapGroup.selectAll(".country-path")
+                .data(currentFeatures, d => d.properties.name) 
+
+            paths.join("path")
+                .attr("class", "country-path")
+                .attr("data-name", d => d.properties.name.replace(/\s/g, '-').replace(/[^a-zA-Z0-9-]/g, ''))
+                .attr("d", path)
+                .on("click", function(event, d) {
+                    if (event.sourceEvent && event.sourceEvent.type === "mousemove") return;
+                    if (!d.properties.name) return; 
+                    handleLocationToggle(d.properties.name);
+                })
+                .classed('country-highlight', d => activeLocations.has(d.properties.name));
+            
+            if (showLabels) {
+                renderLabels();
+            }
+        }
+        
+        // --- INITIALIZATION ---
+        async function initialize() {
+            loadingElement.style.display = 'flex';
+            try {
+                // 1. Load initial data (World)
+                await loadWorldData();
+                
+                // 2. Set initial features and projection
+                currentFeatures = worldCountryFeatures;
+                currentProjection = worldProjection; 
+                
+                // 3. Render map (automatically calls updateSvgDimensions and then resetView calls updateSvgDimensionsAndFit)
+                await renderMap();
+                resetView(); // Force fit the map initially
+                
+                // 4. Finalize UI
+                loadingElement.style.display = 'none';
+                populateList(currentFeatures); 
+                updateStats();
+            } catch (error) {
+                console.error("Initialization failed:", error);
+                loadingElement.style.display = 'none'; 
+            }
+        }
+        
+        // Handle window resize for responsiveness
+        function handleResize() {
+            if (currentFeatures.length > 0) {
+                // Re-fit the projection to the new container size
+                updateSvgDimensionsAndFit(); 
+                
+                // Redraw paths to use new projection scaling
+                mapGroup.selectAll(".country-path").attr("d", path);
+                
+                // Re-apply the zoom/pan transform based on the last known state
+                svg.call(zoom.transform, d3.zoomTransform(svg.node()));
+                
+                if (showLabels) {
+                    renderLabels();
+                }
+            }
+        }
+        
+        window.onload = initialize;
+        window.addEventListener('resize', handleResize);
+
+    </script>
+</body>
+</html>
